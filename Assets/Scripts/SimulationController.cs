@@ -113,6 +113,7 @@ namespace GoogleARCore.Examples.HelloAR
             obj.transform.parent = anchor.transform;
             ScannerCount++;
             anchor.gameObject.name = "Scanner" + (PlacedScanners.Count+1).ToString();
+
             AdjustScanNum();
         }
         private void AdjustScanNum()
