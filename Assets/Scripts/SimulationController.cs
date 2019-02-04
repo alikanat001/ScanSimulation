@@ -21,9 +21,12 @@
 namespace GoogleARCore.Examples.HelloAR
 {
     using System.Collections.Generic;
+    using System.IO;
     using GoogleARCore;
+    using GoogleARCore.Examples.AugmentedImage;
     using GoogleARCore.Examples.Common;
     using UnityEngine;
+    using UnityEngine.UI;
 
 #if UNITY_EDITOR
     // Set up touch input propagation while using Instant Preview in the editor.
@@ -38,6 +41,8 @@ namespace GoogleARCore.Examples.HelloAR
         /// <summary>
         /// The first-person camera being used to render the passthrough camera image (i.e. AR background).
         /// </summary>
+        /// 
+        public Text instruction;
         public Camera FirstPersonCamera;
         public GameObject Scanner;      
         private bool m_IsQuitting = false;
@@ -47,6 +52,12 @@ namespace GoogleARCore.Examples.HelloAR
         private List<GameObject> selectedObjects = new List<GameObject>();
         private List<GameObject> PlacedScanners = new List<GameObject>();
         private Color originalColor;
+
+        private List<AugmentedImage> m_TempAugmentedImages = new List<AugmentedImage>();
+        private Dictionary<int, AugmentedImageVisualizer> m_Visualizers
+            = new Dictionary<int, AugmentedImageVisualizer>();
+        public AugmentedImageVisualizer AugmentedImageVisualizerPrefab;
+
         void Start()
         {
             originalColor = Scanner.GetComponent<Renderer>().sharedMaterial.color;
@@ -86,8 +97,30 @@ namespace GoogleARCore.Examples.HelloAR
 
                 
             }
-            Debug.Log(PlacedScanners.Count);
+
+            // Get updated augmented images for this frame.
+            Session.GetTrackables<AugmentedImage>(m_TempAugmentedImages, TrackableQueryFilter.Updated);
+
+            foreach (var image in m_TempAugmentedImages)
+            {
+                AugmentedImageVisualizer visualizer = null;
+                m_Visualizers.TryGetValue(image.DatabaseIndex, out visualizer);
+                if (image.TrackingState == TrackingState.Tracking && visualizer == null)
+                {
+                    // Create an anchor to ensure that ARCore keeps tracking this augmented image.
+                    Anchor anchor = image.CreateAnchor(image.CenterPose);
+                    visualizer = (AugmentedImageVisualizer)Instantiate(AugmentedImageVisualizerPrefab, anchor.transform);
+                    visualizer.Image = image;
+                    m_Visualizers.Add(image.DatabaseIndex, visualizer);
+                }
+                else if (image.TrackingState == TrackingState.Stopped && visualizer != null)
+                {
+                    m_Visualizers.Remove(image.DatabaseIndex);
+                    GameObject.Destroy(visualizer.gameObject);
+                }
+            }
         }   
+
         public void DeleteScanner()
         {
             foreach(GameObject obj in selectedObjects)
@@ -99,6 +132,7 @@ namespace GoogleARCore.Examples.HelloAR
             selectedObjects.Clear();
             AdjustScanNum();
         }
+
         public void AddScanner()
         {
             Pose pose = new Pose();
@@ -116,6 +150,7 @@ namespace GoogleARCore.Examples.HelloAR
 
             AdjustScanNum();
         }
+
         private void AdjustScanNum()
         {
             int ScanCount = 0;
@@ -126,6 +161,87 @@ namespace GoogleARCore.Examples.HelloAR
             }
         }
         
+        public void SaveMap()
+        {
+            if(m_Visualizers.Count==0)
+            {
+                instruction.gameObject.SetActive(true);
+                return;
+            }
+            try
+            {
+                AndroidJavaClass jc = new AndroidJavaClass("android.os.Environment");
+                string path = jc.CallStatic<AndroidJavaObject>("getExternalStoragePublicDirectory", jc.GetStatic<string>("DIRECTORY_DCIM")).Call<string>("getAbsolutePath");
+
+                path = path.Substring(0, path.IndexOf("/DCIM")) + "/Android/data/" + Application.identifier;
+                var fs = new FileStream(path + "/Map.txt", FileMode.Create, FileAccess.Write);
+                if (File.Exists(path + "/Map.txt"))
+                {
+                    Debug.Log(path);
+                }
+                using (var bs = new BufferedStream(fs))
+                using (var sr = new StreamWriter(bs))
+                {
+                    foreach (var elem in m_Visualizers.Values)
+                    {
+                        Debug.Log("SaveMap is called");
+                        // First write number of scanners on map
+                        sr.WriteLine(PlacedScanners.Count.ToString());
+                        Debug.Log("Number is written" + elem.FrameLowerLeft);
+                        // Write corners of the marker
+                        sr.WriteLine(elem.FrameLowerLeft.transform.position.x.ToString());
+                        sr.WriteLine(elem.FrameLowerLeft.transform.position.y.ToString());
+                        sr.WriteLine(elem.FrameLowerLeft.transform.position.z.ToString());
+
+                        sr.WriteLine(elem.FrameLowerRight.transform.position.x.ToString());
+                        sr.WriteLine(elem.FrameLowerRight.transform.position.y.ToString());
+                        sr.WriteLine(elem.FrameLowerRight.transform.position.z.ToString());
+
+                        sr.WriteLine(elem.FrameUpperLeft.transform.position.x.ToString());
+                        sr.WriteLine(elem.FrameUpperLeft.transform.position.y.ToString());
+                        sr.WriteLine(elem.FrameUpperLeft.transform.position.z.ToString());
+
+                        sr.WriteLine(elem.FrameUpperRight.transform.position.x.ToString());
+                        sr.WriteLine(elem.FrameUpperRight.transform.position.y.ToString());
+                        sr.WriteLine(elem.FrameUpperRight.transform.position.z.ToString());
+
+                        // Write anchor positions
+                        foreach (GameObject obj in PlacedScanners)
+                        {
+                            sr.WriteLine(obj.transform.parent.transform.position.x.ToString());
+                            sr.WriteLine(obj.transform.parent.transform.position.y.ToString());
+                            sr.WriteLine(obj.transform.parent.transform.position.z.ToString());
+                        }
+                    }
+                }
+                instruction.text = "Point Cloud Saved!";
+            }
+            catch(FileNotFoundException ex)
+            {
+                Debug.Log("file not found");
+            }
+            try
+            {
+                AndroidJavaClass jc = new AndroidJavaClass("android.os.Environment");
+                string path = jc.CallStatic<AndroidJavaObject>("getExternalStoragePublicDirectory", jc.GetStatic<string>("DIRECTORY_DCIM")).Call<string>("getAbsolutePath");
+
+                path = path.Substring(0, path.IndexOf("/DCIM")) + "/Android/data/" + Application.identifier;
+                var ffs = new FileStream(path + "/Map.txt", FileMode.Open, FileAccess.Read);
+                using (var bss = new BufferedStream(ffs))
+                using (var sr = new StreamReader(bss))
+                {
+                    string line;
+                    while ((line = sr.ReadLine()) != null)
+                    {
+                        Debug.Log(line);
+                    }
+                }
+            }
+            catch(FileNotFoundException)
+            {
+                Debug.Log("File not found for reading");
+            }
+        }
         private void _UpdateApplicationLifecycle()
         {
             // Exit the app when the 'back' button is pressed.

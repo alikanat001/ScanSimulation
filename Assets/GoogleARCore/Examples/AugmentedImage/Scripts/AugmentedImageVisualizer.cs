@@ -32,6 +32,11 @@ namespace GoogleARCore.Examples.AugmentedImage
     /// </summary>
     public class AugmentedImageVisualizer : MonoBehaviour
     {
+
+        [HideInInspector]
+        public float ExtentX = 0.1975f;
+        [HideInInspector]
+        public float ExtentZ = 0.2375f;
         /// <summary>
         /// The AugmentedImage to visualize.
         /// </summary>
@@ -71,8 +76,8 @@ namespace GoogleARCore.Examples.AugmentedImage
                 return;
             }
 
-            float halfWidth = Image.ExtentX / 2;
-            float halfHeight = Image.ExtentZ / 2;
+            float halfWidth = ExtentX / 2;
+            float halfHeight = ExtentZ / 2;
             FrameLowerLeft.transform.localPosition = (halfWidth * Vector3.left) + (halfHeight * Vector3.back);
             FrameLowerRight.transform.localPosition = (halfWidth * Vector3.right) + (halfHeight * Vector3.back);
             FrameUpperLeft.transform.localPosition = (halfWidth * Vector3.left) + (halfHeight * Vector3.forward);
