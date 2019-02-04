@@ -138,7 +138,6 @@ namespace GoogleARCore.Examples.HelloAR
             Pose pose = new Pose();
             pose.position = FirstPersonCamera.transform.position;
             
-
             pose.rotation = Quaternion.identity;
             Anchor anchor = Session.CreateAnchor(pose);
             var obj = Instantiate(Scanner, pose.position, pose.rotation);
